@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sudhanshu Remote | Viva Edition</title>
+    <!-- Optimized Socket.io loading -->
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+        }
+
+        body { 
+            margin: 0; 
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--bg);
+            color: var(--text-main);
+            overflow-x: hidden;
+        }
+
+        nav {
+            background: white;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .logo { font-weight: 800; font-size: 1.25rem; color: var(--primary); }
+
+        /* LANDING PAGE */
+        #landing-view { 
+            max-width: 1000px;
+            margin: 4rem auto;
+            padding: 0 2rem;
+        }
+
+        .hero-section { text-align: center; margin-bottom: 3rem; }
+        .hero-section h1 { font-size: 2.5rem; color: #0f172a; margin-bottom: 0.5rem; }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 2rem; }
+
+        .card { 
+            background: var(--card-bg); 
+            padding: 2rem; 
+            border-radius: 16px; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
+            text-align: center;
+        }
+
+        input { 
+            width: 100%; padding: 12px; margin-bottom: 1rem;
+            border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1.1rem; text-align: center;
+        }
+
+        button { 
+            width: 100%; padding: 12px; cursor: pointer; font-weight: 600;
+            background: var(--primary); color: white; border: none; border-radius: 8px;
+        }
+
+        .btn-outline { background: white; border: 2px solid var(--primary); color: var(--primary); margin-top: 10px;}
+
+        #access-code-container { 
+            margin-top: 1.5rem; padding: 1rem; background: #f0fdf4; 
+            border-radius: 8px; display: none; flex-direction: column; align-items: center;
+        }
+        
+        #access-code-display { font-weight: bold; font-size: 2rem; color: #166534; }
+
+        /* VIEWER PAGE */
+        #viewer-view { 
+            display: none; background: #000; height: 100vh; width: 100vw; 
+            flex-direction: column; justify-content: center; align-items: center;
+        }
+
+        #screen { max-width: 100%; max-height: 100%; object-fit: contain; cursor: crosshair; }
+
+        .toolbar {
+            position: fixed; top: 10px; background: rgba(0,0,0,0.7);
+            color: white; padding: 5px 20px; border-radius: 20px; display: flex; gap: 15px;
+        }
+
+        #exit-btn { background: #ef4444; border: none; color: white; padding: 5px 15px; border-radius: 15px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div class="logo">SUDHANSHU REMOTE CONTROL</div>
+        <div id="connection-status" style="color: #ef4444; font-weight: bold;">● Offline</div>
+    </nav>
+
+    <div id="landing-view">
+        <div class="hero-section">
+            <h1>Mid-Term Viva Project</h1>
+            <p>Secure Remote Desktop Access via Socket.io</p>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>Host This PC</h2>
+                <p>Download the agent and share your code.</p>
+                <button onclick="createMeeting()">Generate Access Code</button>
+                <div id="access-code-container">
+                    <small>Your 6-Digit Code:</small>
+                    <div id="access-code-display">------</div>
+                    <button class="btn-outline" onclick="copyCode()">Copy Code</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Control Remote PC</h2>
+                <p>Enter the code from the other computer.</p>
+                <input id="roomInput" type="text" placeholder="Enter 6-digit code" maxlength="6">
+                <button onclick="joinMeetingUI()">Start Control</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="viewer-view">
+        <div class="toolbar">
+            <span id="stats">System: Loading Stream...</span>
+            <button id="exit-btn" onclick="location.reload()">Stop Session</button>
+        </div>
+        <img id="screen" alt="Remote Stream">
+    </div>
+
+    <script>
+        // Connects to the IP in the URL bar (e.g., http://192.168.1.4:3000)
+        const socket = io();
+
+        const landingView = document.getElementById("landing-view");
+        const viewerView = document.getElementById("viewer-view");
+        const screen = document.getElementById("screen");
+        const stats = document.getElementById("stats");
+        const statusDot = document.getElementById("connection-status");
+        
+        let currentRoom = null;
+        let isViewing = false;
+
+        socket.on('connect', () => {
+            statusDot.innerText = "● Online";
+            statusDot.style.color = "#22c55e";
+        });
+
+        socket.on('disconnect', () => {
+            statusDot.innerText = "● Offline";
+            statusDot.style.color = "#ef4444";
+        });
+
+        // HOST LOGIC
+        function createMeeting() {
+            // Step 1: Download agent.exe from your server
+            window.location.href = '/download-agent'; 
+            // Step 2: Request meeting ID
+            socket.emit("create-meeting");
+        }
+
+        socket.on("meeting-created", (id) => {
+            document.getElementById("access-code-container").style.display = "flex";
+            document.getElementById("access-code-display").innerText = id;
+            currentRoom = id;
+        });
+
+        function copyCode() {
+            const code = document.getElementById("access-code-display").innerText;
+            navigator.clipboard.writeText(code);
+            alert("Code copied!");
+        }
+
+        // VIEWER LOGIC
+        function joinMeetingUI() {
+            const room = document.getElementById("roomInput").value.trim();
+            if (room.length === 6) {
+                currentRoom = room;
+                isViewing = true;
+                landingView.style.display = "none";
+                viewerView.style.display = "flex";
+                socket.emit("join-meeting", room);
+            } else {
+                alert("Please enter a 6-digit code");
+            }
+        }
+
+        socket.on("screen-data", (data) => {
+            if (!isViewing) return;
+            // High-speed update for screen
+            screen.src = "data:image/jpeg;base64," + data.image;
+            if(data.stats) {
+                stats.innerText = `CPU: ${data.stats.cpu}% | RAM: ${data.stats.ram}%`;
+            }
+        });
+
+        // INPUT CONTROL LOGIC
+        function sendMouse(e, type) {
+            if (!isViewing || !currentRoom) return;
+            const rect = screen.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width;
+            const y = (e.clientY - rect.top) / rect.height;
+            socket.emit("mouse-event", { room: currentRoom, type, x, y });
+        }
+
+        screen.addEventListener("mousemove", (e) => sendMouse(e, "move"));
+        screen.addEventListener("mousedown", (e) => sendMouse(e, "mousedown"));
+        screen.addEventListener("mouseup", (e) => sendMouse(e, "mouseup"));
+        screen.addEventListener("contextmenu", (e) => e.preventDefault());
+
+        window.addEventListener("keydown", (e) => {
+            if (!isViewing) return;
+            // Prevent browser scroll keys
+            if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
+            socket.emit("keyboard-event", { room: currentRoom, type: "down", key: e.key });
+        });
+
+        window.addEventListener("keyup", (e) => {
+            if (!isViewing) return;
+            socket.emit("keyboard-event", { room: currentRoom, type: "up", key: e.key });
+        });
+
+    </script>
+</body>
+</html>
